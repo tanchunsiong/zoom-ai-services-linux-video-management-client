@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+
+# Local credentials, runtime state, and diagnostics must never be published.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+credentials.json
+settings.json
+queue.json
+live-diagnostics.log

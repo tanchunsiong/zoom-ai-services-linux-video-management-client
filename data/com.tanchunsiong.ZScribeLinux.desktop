@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Z Scribe
+Comment=Transcribe, translate, summarize, and review local media with Zoom AI Services
+Exec=zscribe-linux
+Icon=com.tanchunsiong.ZScribeLinux
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=Zoom;Scribe;Transcription;Captions;Video;
+StartupNotify=true
+StartupWMClass=com.tanchunsiong.ZScribeLinux

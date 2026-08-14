@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zscribe-linux"
+version = "0.3.0"
+description = "Native GTK 4 media queue and caption review client for Zoom AI Services"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Z Scribe Linux contributors"}]
+dependencies = [
+  "PyJWT>=2.7",
+  "requests>=2.31",
+  "websocket-client>=1.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/tanchunsiong/zoom-ai-services-linux-video-management-client"
+Repository = "https://github.com/tanchunsiong/zoom-ai-services-linux-video-management-client"
+Issues = "https://github.com/tanchunsiong/zoom-ai-services-linux-video-management-client/issues"
+
+[project.gui-scripts]
+zscribe-linux = "zscribe.app:main"
+
+[tool.setuptools.packages.find]
+include = ["zscribe*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
