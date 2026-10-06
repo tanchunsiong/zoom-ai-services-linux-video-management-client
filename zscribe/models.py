@@ -128,6 +128,7 @@ class Settings:
     live_device_id: str = ""
     live_microphone_device_id: str = ""
     live_system_device_id: str = ""
+    live_caption_text_size: float = 24.0
 
     def clamp(self) -> None:
         self.scribe_concurrency = min(max(int(self.scribe_concurrency), 1), 4)
@@ -141,6 +142,9 @@ class Settings:
         )
         self.estimated_characters_per_minute = min(
             max(int(self.estimated_characters_per_minute), 0), 10_000
+        )
+        self.live_caption_text_size = min(
+            max(float(self.live_caption_text_size), 14.0), 96.0
         )
         if self.live_source not in {"microphone", "system", "both"}:
             self.live_source = "microphone"

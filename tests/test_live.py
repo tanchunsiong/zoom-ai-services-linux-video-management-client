@@ -11,6 +11,7 @@ from zscribe.live import (
     audio_capture_pipeline,
     completed_transcript_display,
     completed_transcript_source,
+    floating_caption_segments,
     parse_event,
     parse_vocabulary,
     session_update,
@@ -36,6 +37,17 @@ class LiveTests(unittest.TestCase):
         )
         self.assertEqual(
             completed_transcript_source(segments), "First point\n\nLatest point"
+        )
+
+    def test_floating_caption_keeps_interim_and_two_recent_completed_segments(self) -> None:
+        completed = ["First", "Second", "Latest"]
+        self.assertEqual(
+            floating_caption_segments(completed, "Still speaking"),
+            ["Still speaking", "Latest", "Second"],
+        )
+        self.assertEqual(
+            floating_caption_segments(completed, ""),
+            ["Latest", "Second", "First"],
         )
 
     def test_vocabulary_can_be_extracted_from_full_envelope(self) -> None:

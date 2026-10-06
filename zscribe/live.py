@@ -40,6 +40,15 @@ def completed_transcript_source(segments: list[str]) -> str:
     return "\n\n".join(segments).strip()
 
 
+def floating_caption_segments(completed: list[str], interim: str) -> list[str]:
+    """Return the newest Live captions first, keeping a short readable history."""
+    current = interim.strip()
+    limit = 2 if current else 3
+    values = [current] if current else []
+    values.extend(reversed(completed[-limit:]))
+    return [value for value in values if value.strip()]
+
+
 def parse_vocabulary(value: str) -> dict[str, Any] | None:
     if not value.strip():
         return None

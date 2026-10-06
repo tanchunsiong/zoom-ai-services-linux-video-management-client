@@ -26,7 +26,7 @@ import gi
 gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango  # noqa: E402
 
 from . import __version__, vtt
 from .estimators import (
@@ -36,6 +36,7 @@ from .estimators import (
 from .live import (
     DEFAULT_VOCABULARY, LiveCallbacks, LiveSession, audio_device_options,
     completed_transcript_display, completed_transcript_source,
+    floating_caption_segments,
 )
 from .media import MEDIA_EXTENSIONS, basic_validation_error, discover, probe as media_probe, tool_available
 from .models import Credentials, JobState, LANGUAGES, QueueJob, translation_route
@@ -163,6 +164,7 @@ class ZScribeWindow(Adw.ApplicationWindow):
         self.live_last_frames = 0
         self.live_last_bytes = 0
         self.live_clip_until = 0.0
+        self.floating_caption_message: str | None = None
         self.active_cue_index: int | None = None
         self.review_cues = []
         self.media_stream: Gtk.MediaFile | None = None
@@ -1382,8 +1384,8 @@ class ZScribeWindow(Adw.ApplicationWindow):
     def _live_error(self, error: str) -> bool:
         self._append_live_diagnostic(f"ERROR: {error}")
         self.live_status.set_label(f"Live error: {error}")
-        if hasattr(self, "floating_caption"):
-            self.floating_caption.set_label(f"Live error\n{error[:300]}")
+        self.floating_caption_message = f"Live error\n{error[:300]}"
+        self._render_floating_caption()
         self.toast(error)
         return False
 
@@ -1468,9 +1470,8 @@ class ZScribeWindow(Adw.ApplicationWindow):
         self.live_summarize_button.set_sensitive(
             bool(self.live_source_final) and not self.live_summary_running
         )
-        latest = self.live_interim or (self.live_final[-1] if self.live_final else "Waiting for speech…")
-        if hasattr(self, "floating_caption"):
-            self.floating_caption.set_label(latest)
+        self.floating_caption_message = None
+        self._render_floating_caption()
 
     def _copy_live_transcript(self, _button: Gtk.Button) -> None:
         body = "\n\n".join(self.live_final)
@@ -1633,10 +1634,10 @@ class ZScribeWindow(Adw.ApplicationWindow):
             self.live_button.set_label("Start Listening")
             self.live_button.set_icon_name("media-record-symbolic")
             self.live_button.set_sensitive(True)
-            if hasattr(self, "floating_caption"):
-                self.floating_caption.set_label(
-                    "Live session stopped — open Zoom API diagnostics"
-                )
+            self.floating_caption_message = (
+                "Live session stopped — open Zoom API diagnostics"
+            )
+            self._render_floating_caption()
         return False
 
     def _show_caption_window(self, _button: Gtk.Button) -> None:
@@ -1644,17 +1645,111 @@ class ZScribeWindow(Adw.ApplicationWindow):
             self.floating_window.present()
             return
         window = Gtk.Window(title="Z Scribe Live Caption", transient_for=self)
-        window.set_default_size(760, 150)
+        window.set_default_size(760, 250)
+        window.set_size_request(360, 150)
         window.set_decorated(True)
         window.set_modal(False)
-        self.floating_caption = Gtk.Label(label="Waiting for speech…", wrap=True, justify=Gtk.Justification.CENTER)
-        self.floating_caption.add_css_class("floating-caption")
-        self.floating_caption.set_margin_top(20); self.floating_caption.set_margin_bottom(20)
-        self.floating_caption.set_margin_start(24); self.floating_caption.set_margin_end(24)
-        window.set_child(self.floating_caption)
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        root.add_css_class("floating-caption")
+        root.set_margin_top(12)
+        root.set_margin_bottom(12)
+        root.set_margin_start(18)
+        root.set_margin_end(18)
+
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        size_label = Gtk.Label(label="Text size", xalign=0)
+        size_label.add_css_class("dim-label")
+        controls.append(size_label)
+        self.floating_caption_scale = Gtk.Scale.new_with_range(
+            Gtk.Orientation.HORIZONTAL, 14.0, 96.0, 1.0
+        )
+        self.floating_caption_scale.set_value(self.settings.live_caption_text_size)
+        self.floating_caption_scale.set_digits(0)
+        self.floating_caption_scale.set_draw_value(False)
+        self.floating_caption_scale.set_hexpand(True)
+        self.floating_caption_scale.set_tooltip_text(
+            "Adjust the floating caption font size"
+        )
+        self.floating_caption_scale.connect(
+            "value-changed", self._floating_caption_text_size_changed
+        )
+        controls.append(self.floating_caption_scale)
+        self.floating_caption_size_value = Gtk.Label(xalign=1)
+        self.floating_caption_size_value.set_width_chars(5)
+        controls.append(self.floating_caption_size_value)
+        root.append(controls)
+
+        caption_scroll = Gtk.ScrolledWindow()
+        caption_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        caption_scroll.set_vexpand(True)
+        self.floating_caption_stack = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=6
+        )
+        self.floating_caption_stack.set_valign(Gtk.Align.START)
+        self.floating_caption_stack.set_hexpand(True)
+        caption_scroll.set_child(self.floating_caption_stack)
+        root.append(caption_scroll)
+        window.set_child(root)
         window.connect("close-request", self._caption_closed)
         self.floating_window = window
+        self.floating_caption_message = None
+        self._render_floating_caption()
         window.present()
+
+    def _floating_caption_text_size_changed(self, scale: Gtk.Scale) -> None:
+        self.settings.live_caption_text_size = min(
+            max(float(scale.get_value()), 14.0), 96.0
+        )
+        if hasattr(self, "floating_caption_size_value"):
+            self.floating_caption_size_value.set_label(
+                f"{self.settings.live_caption_text_size:.0f} pt"
+            )
+        self.store.save_settings(self.settings)
+        self._render_floating_caption()
+
+    @staticmethod
+    def _caption_markup(value: str, size: float, *, bold: bool = False) -> str:
+        escaped = GLib.markup_escape_text(value)
+        weight = " weight=\"bold\"" if bold else ""
+        return (
+            f"<span size=\"{int(round(size * Pango.SCALE))}\"{weight}>"
+            f"{escaped}</span>"
+        )
+
+    def _render_floating_caption(self) -> None:
+        stack = getattr(self, "floating_caption_stack", None)
+        if stack is None:
+            return
+        while child := stack.get_first_child():
+            stack.remove(child)
+        size = self.settings.live_caption_text_size
+        if self.floating_caption_message:
+            label = Gtk.Label(xalign=0, wrap=True, justify=Gtk.Justification.LEFT)
+            label.set_halign(Gtk.Align.FILL)
+            label.set_hexpand(True)
+            label.set_markup(self._caption_markup(self.floating_caption_message, size))
+            stack.append(label)
+            if hasattr(self, "floating_caption_size_value"):
+                self.floating_caption_size_value.set_label(f"{size:.0f} pt")
+            return
+
+        entries = floating_caption_segments(self.live_final, self.live_interim)
+        if not entries:
+            entries = ["Waiting for speech…"]
+        for entry in entries:
+            source, separator, translation = entry.partition("\n")
+            markup = self._caption_markup(source, size, bold=True)
+            if separator and translation.strip():
+                markup += "\n" + self._caption_markup(
+                    translation.strip(), max(12.0, size * 0.77)
+                )
+            label = Gtk.Label(xalign=0, wrap=True, justify=Gtk.Justification.LEFT)
+            label.set_halign(Gtk.Align.FILL)
+            label.set_hexpand(True)
+            label.set_markup(markup)
+            stack.append(label)
+        if hasattr(self, "floating_caption_size_value"):
+            self.floating_caption_size_value.set_label(f"{size:.0f} pt")
 
     def _caption_closed(self, _window: Gtk.Window) -> bool:
         self.floating_window = None
@@ -1696,7 +1791,8 @@ class ZScribeApplication(Adw.Application):
         css = Gtk.CssProvider()
         css.load_from_data(b"""
             .caption-overlay { background: #111; color: white; padding: 12px; font-weight: 600; }
-            .floating-caption { background: #111; color: white; font-size: 24px; font-weight: 600; padding: 18px; }
+            .floating-caption { background: #111; color: white; padding: 18px; }
+            .floating-caption-entry { color: white; }
             .live-transcript { font-size: 18px; padding: 18px; }
             .success { color: #2ec27e; }
             .error { color: #e01b24; }

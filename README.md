@@ -22,7 +22,9 @@ native Linux facilities.
   simultaneously; select each device independently; view mixed peak
   dBFS/clipping; apply optional software auto gain; translate finalized captions;
   edit vocabulary JSON; copy/clear or summarize the transcript; and open a compact
-  caption window. The newest completed speech turn stays at the top.
+  caption window. The newest caption stays at the top while the two previous
+  completed turns remain visible during speech (three completed turns when idle).
+  The floating window includes a persisted 14–96 pt text-size slider.
 - **Settings** — save Zoom Build credentials, FFmpeg paths, segment duration,
   Scribe concurrency, account pricing, and character-density overrides.
 
